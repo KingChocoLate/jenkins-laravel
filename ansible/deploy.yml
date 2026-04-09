@@ -1,0 +1,68 @@
+- hosts: web
+  become: yes
+  vars:
+    app_dir: "{{ deploy_path }}"
+
+  tasks:
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Upload release archive
+      copy:
+        src: "{{ workspace }}/release.tar.gz"
+        dest: /tmp/release.tar.gz
+
+    - name: Extract release archive
+      unarchive:
+        src: /tmp/release.tar.gz
+        dest: "{{ app_dir }}"
+        remote_src: yes
+
+    - name: Copy production env file
+      copy:
+        src: "{{ workspace }}/.env.production"
+        dest: "{{ app_dir }}/.env"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Ensure storage exists
+      file:
+        path: "{{ app_dir }}/storage"
+        state: directory
+        owner: www-data
+        group: www-data
+        recurse: yes
+
+    - name: Ensure bootstrap cache exists
+      file:
+        path: "{{ app_dir }}/bootstrap/cache"
+        state: directory
+        owner: www-data
+        group: www-data
+        recurse: yes
+
+    - name: Fix Laravel writable permissions
+      file:
+        path: "{{ item }}"
+        owner: www-data
+        group: www-data
+        mode: '775'
+        recurse: yes
+      loop:
+        - "{{ app_dir }}/storage"
+        - "{{ app_dir }}/bootstrap/cache"
+
+    - name: Run Laravel optimize commands
+      shell: |
+        php artisan config:clear
+        php artisan route:clear
+        php artisan view:clear
+        php artisan storage:link || true
+      args:
+        chdir: "{{ app_dir }}"
